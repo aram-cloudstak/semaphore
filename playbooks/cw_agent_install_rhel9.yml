@@ -1,0 +1,26 @@
+---
+- name: Install AWS Cloudwatch Agent on CIS L1 RHEL9 
+  hosts: linux
+  become: True
+  # user when to determine if rhel9. good examples of fact checks here: https://github.com/christiangda/ansible-role-amazon-cloudwatch-agent
+  tasks:
+    - name: Display the hostname
+      command: hostname
+      register: hostname_output
+      changed_when: false
+
+    - name: Check if CloudWatch Agent package is installed
+      shell: rpm -q amazon-cloudwatch-agent
+      register: cwagent_status
+      ignore_errors: yes
+
+    - name: Display installation status
+      debug:
+        msg: "CloudWatch Agent is {{ 'installed' if cwagent_status.rc == 0 else 'NOT installed' }}"
+
+    - name: Print the output
+      debug:
+        msg: "Linux | Install Cloudwatch Agent | System {{ inventory_hostname }} has OS {{ ansible_distribution }}" 
+#        var: item.stdout_lines
+#      loop:
+#        - "{{ hostname_output }}"
