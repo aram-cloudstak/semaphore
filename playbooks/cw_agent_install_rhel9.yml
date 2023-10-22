@@ -1,6 +1,6 @@
 ---
 - name: Install AWS Cloudwatch Agent on CIS L1 RHEL9 
-  hosts: linux
+  hosts: r9
   become: True
   # user when to determine if rhel9. good examples of fact checks here: https://github.com/christiangda/ansible-role-amazon-cloudwatch-agent
   tasks:
