@@ -18,9 +18,113 @@
       debug:
         msg: "CloudWatch Agent is {{ 'installed' if cwagent_status.rc == 0 else 'NOT installed' }}"
 
+
+
+    - name: Download CloudWatch rpm from AWS
+      get_url:
+        url: "https://s3.amazonaws.com/amazoncloudwatch-agent/redhat/amd64/latest/amazon-cloudwatch-agent.rpm"
+        dest: /tmp/amazon-cloudwatch-agent.rpm
+    # Possible to put these somewhere local to EC2 so inet access not required?
+
+
+
+    - name: Download the public key
+      get_url:
+        url: "https://amazoncloudwatch-agent.s3.amazonaws.com/assets/amazon-cloudwatch-agent.gpg"
+        dest: /tmp/amazon-cloudwatch-agent.gpg
+
+    - name: Import the public key
+      command: gpg --import /tmp/amazon-cloudwatch-agent.gpg
+      ignore_errors: yes
+      register: gpg_import_result
+
+    - name: Run gpg --fingerprint and save to a variable
+      command: gpg --fingerprint 3B789C72
+      ignore_errors: yes
+      register: gpg_fingerprint_result
+
+    - name: Set the fingerprint variable
+      set_fact:
+        fingerprint_output: "{{ gpg_fingerprint_result.stdout }}"
+      when: gpg_fingerprint_result is succeeded
+
+
+
+
+    - name: Download the package signature file
+      get_url:
+        url: "https://amazoncloudwatch-agent.s3.amazonaws.com/redhat/amd64/latest/amazon-cloudwatch-agent.rpm.sig"
+        dest: /tmp/signature-file.sig
+
+    - name: Verify the signature
+      command: gpg --verify /tmp/signature-file.sig /tmp/amazon-cloudwatch-agent.rpm
+      ignore_errors: yes
+      register: gpg_verify_result
+
+    - name: Fail if the signature is bad
+      fail:
+        msg: "The GPG signature is not valid. Do not install the agent. Contact AWS."
+      when: "'BAD signature' in gpg_verify_result.stderr"
+
+
+
+
+    - name: Import the GPG key to RPM for yum
+      command: rpm --import /tmp/amazon-cloudwatch-agent.gpg
+
+    - name: Clear yum cache
+      shell: yum clean all
+
+    # To erase package and retest: sudo rpm -e amazon-cloudwatch-agent
+    - name: Install CloudWatch Agent
+      shell: rpm -U /tmp/amazon-cloudwatch-agent.rpm
+      register: cwagent_install_status
+
+
+
+    - name: Post-install check if CloudWatch Agent package is installed
+      shell: rpm -q amazon-cloudwatch-agent
+      register: cwagent_postinstall_status
+      ignore_errors: yes
+
+    - name: Display installation status
+      debug:
+        msg: "CloudWatch Agent {{ 'successfully installed' if cwagent_postinstall_status.rc == 0 else 'did NOT successfully install.' }}"
+
+    - name: Configure CloudWatch agent
+      command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-config-wizard
+      args:
+        creates: /opt/aws/amazon-cloudwatch-agent/bin/config.json
+      register: config_output
+      ignore_errors: yes
+
+    - name: Copy the generated config file
+      copy:
+        src: /opt/aws/amazon-cloudwatch-agent/bin/config.json
+        dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+      when: config_output|success
+
+    - name: Start and enable CloudWatch agent service
+      systemd:
+        name: amazon-cloudwatch-agent
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: Restart CloudWatch agent on config change
+      systemd:
+        name: amazon-cloudwatch-agent
+        state: restarted
+
+    - name: Clean up temporary files
+      file:
+        path: /tmp/{{ item }}
+        state: absent
+      with_items:
+        - amazon-cloudwatch-agent.rpm
+        - amazon-cloudwatch-agent.gpg
+        - signature-file.sig
+
     - name: Print the output
       debug:
         msg: "Linux | Install Cloudwatch Agent | System {{ inventory_hostname }} has OS {{ ansible_distribution }}" 
-#        var: item.stdout_lines
-#      loop:
-#        - "{{ hostname_output }}"
