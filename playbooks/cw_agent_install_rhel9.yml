@@ -72,8 +72,15 @@
     - name: Import the GPG key to RPM for yum
       command: rpm --import /tmp/amazon-cloudwatch-agent.gpg
 
-    - name: Clear yum cache
-      shell: yum clean all
+#    - name: Clear yum cache
+#      shell: yum clean all
+
+#    - name: Clear yum cache
+#      yum:
+#        name: '*'
+#        state: clean
+
+
 
     # To erase package and retest: sudo rpm -e amazon-cloudwatch-agent
     - name: Install CloudWatch Agent
@@ -91,18 +98,70 @@
       debug:
         msg: "CloudWatch Agent {{ 'successfully installed' if cwagent_postinstall_status.rc == 0 else 'did NOT successfully install.' }}"
 
-    - name: Configure CloudWatch agent
-      command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-config-wizard
-      args:
-        creates: /opt/aws/amazon-cloudwatch-agent/bin/config.json
-      register: config_output
-      ignore_errors: yes
 
-    - name: Copy the generated config file
+
+
+    - name: Create the Amazon Cloudwatch Agent config directory if it doesn't exist
+      file:
+        path: /opt/aws/amazon-cloudwatch-agent/etc
+        state: directory
+
+    - name: Write Amazon CloudWatch Agent configuration to file
       copy:
-        src: /opt/aws/amazon-cloudwatch-agent/bin/config.json
+        content: |
+          {
+              "agent": {
+                  "metrics_collection_interval": 60,
+                  "run_as_user": "root"
+              },
+              "metrics": {
+                  "aggregation_dimensions": [
+                      [
+                          "InstanceId"
+                      ]
+                  ],
+                  "append_dimensions": {
+                      "AutoScalingGroupName": "${aws:AutoScalingGroupName}",
+                      "ImageId": "${aws:ImageId}",
+                      "InstanceId": "${aws:InstanceId}",
+                      "InstanceType": "${aws:InstanceType}"
+                  },
+                  "metrics_collected": {
+                      "collectd": {
+                          "metrics_aggregation_interval": 60
+                      },
+                      "disk": {
+                          "measurement": [
+                              "used_percent"
+                          ],
+                          "metrics_collection_interval": 60,
+                          "resources": [
+                              "*"
+                          ]
+                      },
+                      "mem": {
+                          "measurement": [
+                              "mem_used_percent"
+                          ],
+                          "metrics_collection_interval": 60
+                      },
+                      "statsd": {
+                          "metrics_aggregation_interval": 60,
+                          "metrics_collection_interval": 10,
+                          "service_address": ":8125"
+                      }
+                  }
+              }
+          }
         dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
-      when: config_output|success
+
+
+
+#    - name: Copy the generated config file
+#      copy:
+#        src: /opt/aws/amazon-cloudwatch-agent/bin/config.json
+#        dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+#      when: config_output|success
 
     - name: Start and enable CloudWatch agent service
       systemd:
