@@ -1,0 +1,57 @@
+---
+# prereq on ansible host: ansible-galaxy collection install community.general
+- name: Set up LVM on RHEL 9
+  hosts: r9
+  become: yes
+  vars_files:
+    - /home/ansible/alkermes/playbooks/rhel9_lvm_vars.yml
+  tasks:
+    - name: Install lvm pacakges
+      yum:
+        name: 'lvm*'
+        state: present
+
+    - name: Create a volume group on top of /dev/sda1 with physical extent size = 32MB
+      community.general.lvg:
+        pvs: "{{ lvm_physical_volume }}"
+        vg: "{{ lvm_volume_group }}"
+        pvresize: true
+
+    - name: Create LVM 
+      community.general.lvol:
+#        pvs: "{{ lvm_physical_volume }}"
+        vg: "{{ lvm_volume_group }}"
+        lv: "{{ lvm_logical_volume }}"
+        size: "{{ lvm_logical_volume_size }}"
+      when: lvm_physical_volume is defined
+
+    - name: Format the Logical Volume
+      filesystem:
+        fstype: "{{ lvm_filesystem_type }}"
+        dev: "/dev/{{ lvm_volume_group }}/{{ lvm_logical_volume }}"
+      when: lvm_logical_volume is defined
+
+    - name: Mount the Logical Volume
+      mount:
+        path: "{{ lvm_mount_point }}"
+        src: "/dev/{{ lvm_volume_group }}/{{ lvm_logical_volume }}"
+        fstype: "{{ lvm_filesystem_type }}"
+        state: mounted
+      when: lvm_logical_volume is defined
+
+    - name: Add entry to /etc/fstab
+      lineinfile:
+        path: /etc/fstab
+        line: "/dev/{{ lvm_volume_group }}/{{ lvm_logical_volume }} {{ lvm_mount_point }} {{ lvm_filesystem_type }} defaults 0 0"
+      when: lvm_logical_volume is defined
+
+#  vars:
+#    lvm_physical_volume: "/dev/sdb1"  # Define the physical volume
+#    lvm_volume_group: "my_vg"         # Define the volume group name
+#    lvm_physical_extent_size: 4      # Define the physical extent size (in MB)
+#    lvm_logical_volume: "my_lv"       # Define the logical volume name
+#    lvm_logical_volume_size: "1g"    # Define the logical volume size
+#    lvm_thinpool: "thinpool"          # Define the thin pool name
+#    lvm_filesystem_type: "xfs"       # Define the filesystem type
+#    lvm_mount_point: "/mnt/my_mount"  # Define the mount point
+

@@ -1,0 +1,10 @@
+---
+# Variables for LVM setup
+lvm_physical_volume: /dev/xvdf
+lvm_volume_group: vgdata
+lvm_logical_volume: lvdata
+lvm_logical_volume_size: 100%FREE
+#lvm_logical_volume_size: 100g
+lvm_filesystem_type: xfs
+lvm_mount_point: /mnt/data
+
